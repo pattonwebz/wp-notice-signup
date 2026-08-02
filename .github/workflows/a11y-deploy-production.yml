@@ -1,0 +1,125 @@
+name: Deploy to production
+
+# Runs on merge to `main` — nothing else.
+#
+# There is no accessibility scan in this workflow, and that is deliberate. The
+# scan already happened, against the real staging site, while the change was
+# still a pull request (a11y-staging-gate.yml). Branch protection is what stops
+# a failing PR from ever reaching this point. Re-scanning here would tell you
+# about a problem you already shipped.
+#
+# What this does do is verify production actually came back up afterwards, and
+# say so in the job summary.
+#
+# Required repository secrets (Settings > Secrets and variables > Actions):
+#   PROD_SSH_HOST              e.g. www.example.com
+#   PROD_SSH_USER              SSH user with write access to the plugin path
+#   PROD_SSH_PRIVATE_KEY       Private key for a deploy-only key pair, no passphrase
+#                              — a DIFFERENT key from staging's
+#   PROD_REMOTE_PATH           Absolute path to the plugin folder on production
+#   PROD_BASE_URL              e.g. https://www.example.com (no trailing slash)
+#   PROD_SSH_KNOWN_HOSTS       Optional but recommended: output of `ssh-keyscan -H <host>`
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Deploys to one server: let an in-flight one finish rather than leaving a
+# half-rsynced plugin directory behind.
+concurrency:
+  group: production-site
+  cancel-in-progress: false
+
+jobs:
+  deploy-production:
+    name: Deploy to production
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Validate required production secrets are set
+        run: |
+          missing=""
+          for name in PROD_SSH_HOST PROD_SSH_USER PROD_REMOTE_PATH PROD_BASE_URL; do
+            value="${!name:-}"
+            if [ -z "$value" ]; then
+              missing="$missing $name"
+            fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Missing required secret(s):$missing. Refusing to run rsync --delete with an incomplete destination." >&2
+            exit 1
+          fi
+          case "$PROD_REMOTE_PATH" in
+            /*) ;;
+            *)
+              echo "::error::PROD_REMOTE_PATH ('$PROD_REMOTE_PATH') must be an absolute path to the plugin folder. A relative or empty value can make rsync --delete target the wrong directory." >&2
+              exit 1
+              ;;
+          esac
+        env:
+          PROD_SSH_HOST: ${{ secrets.PROD_SSH_HOST }}
+          PROD_SSH_USER: ${{ secrets.PROD_SSH_USER }}
+          PROD_REMOTE_PATH: ${{ secrets.PROD_REMOTE_PATH }}
+          PROD_BASE_URL: ${{ secrets.PROD_BASE_URL }}
+
+      - name: Configure production SSH key
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "${{ secrets.PROD_SSH_PRIVATE_KEY }}" > ~/.ssh/prod_key
+          chmod 600 ~/.ssh/prod_key
+          if [ -n "${{ secrets.PROD_SSH_KNOWN_HOSTS }}" ]; then
+            printf '%s\n' "${{ secrets.PROD_SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          else
+            echo "::warning::PROD_SSH_KNOWN_HOSTS not set — trusting this server's host key on first connect (TOFU) via ssh-keyscan. Set that secret (output of 'ssh-keyscan -H your-host') to pin it instead."
+            ssh-keyscan -H "${{ secrets.PROD_SSH_HOST }}" >> ~/.ssh/known_hosts
+          fi
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Install lftp when deploying over SFTP
+        if: ${{ (vars.DEPLOY_TRANSPORT || 'sftp') == 'sftp' }}
+        run: sudo apt-get update && sudo apt-get install -y lftp
+
+      - name: Deploy the plugin to production
+        env:
+          DEPLOY_TRANSPORT: ${{ vars.DEPLOY_TRANSPORT || 'sftp' }}
+          DEPLOY_SSH_HOST: ${{ secrets.PROD_SSH_HOST }}
+          DEPLOY_SSH_USER: ${{ secrets.PROD_SSH_USER }}
+          DEPLOY_SSH_KEY: ~/.ssh/prod_key
+        run: |
+          # Mirrors with --delete, so PROD_REMOTE_PATH must point at the plugin
+          # folder itself and never a parent. Only this plugin is deployed: the
+          # site belongs to somebody else.
+          scripts/deploy-to-staging.sh . "${{ secrets.PROD_REMOTE_PATH }}"
+
+      - name: Wait for production to serve the new code
+        env:
+          WORDPRESS_BASE_URL: ${{ secrets.PROD_BASE_URL }}
+        run: |
+          for attempt in $(seq 1 30); do
+            if curl --silent --fail "$WORDPRESS_BASE_URL/wp-login.php" >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::Production did not respond at $WORDPRESS_BASE_URL after 60s. The rsync completed — check the server." >&2
+          exit 1
+
+      - name: Summarise the deployment
+        if: always()
+        run: |
+          {
+            echo "### Production deploy"
+            echo
+            echo "Merged commit: \`${{ github.sha }}\`"
+            echo
+            echo "This change passed the staging accessibility gate as a pull request before it could be merged."
+          } >> "$GITHUB_STEP_SUMMARY"

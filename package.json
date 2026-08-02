@@ -1,0 +1,20 @@
+{
+  "name": "wp-notice-signup",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A small WordPress plugin, with the accessibility gating it ships with: a Playwright + axe-core suite that scans the site it is installed into, and workflows that block a merge or a release on what it finds.",
+  "scripts": {
+    "stack:up": "docker compose up -d db wordpress",
+    "stack:down": "docker compose down --volumes --remove-orphans",
+    "test:a11y": "node -e \"require('node:fs').rmSync('artifacts/a11y/raw',{ recursive: true, force: true })\" && playwright test",
+    "aggregate:a11y": "node ./scripts/aggregate-axe-results.mjs",
+    "report:a11y": "node ./scripts/run-report-locally.mjs",
+    "show:report": "playwright show-report artifacts/playwright-report",
+    "stack:init": "docker compose run --rm wpcli bash /scripts/bootstrap-local.sh"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.10.2",
+    "@playwright/test": "^1.52.0",
+    "axe-report-action": "github:pattonwebz/axe-report-action#v0.0.3"
+  }
+}

@@ -1,0 +1,282 @@
+name: Release accessibility gate
+
+# PATTERN 2 OF 2: block on release.
+#
+#   push a version tag  →  build the plugin zip  →  deploy THAT ARTIFACT to
+#   staging  →  scan staging  →  publish the GitHub Release only if it passes
+#
+# The difference from the PR gate is the thing worth saying out loud:
+#
+#   a11y-staging-gate.yml gates the SOURCE. It scans a branch before it can be
+#   merged, so a regression never lands on main.
+#
+#   this workflow gates the ARTIFACT. It scans the exact zip that is about to be
+#   handed to other people, so a regression never leaves the building.
+#
+# Those are not the same check. Source can be clean while the built artifact is
+# broken — a file missing from the zip, a build step that mangles an asset, a
+# version bump that ships a stale vendored dependency. The only way to know what
+# you are shipping is accessible is to install what you are shipping and scan it.
+#
+# This is also why the deploy step below installs the built zip rather than
+# syncing the working tree: syncing the source would test something that is not
+# the release.
+#
+# Required repository secrets — the same staging site as the PR gate:
+#   DEPLOY_SSH_HOST, DEPLOY_SSH_USER, DEPLOY_SSH_PRIVATE_KEY,
+#   DEPLOY_REMOTE_PATH, DEPLOY_BASE_URL,
+#   DEPLOY_WP_ADMIN_USER, DEPLOY_WP_ADMIN_PASSWORD,
+#   DEPLOY_SSH_KNOWN_HOSTS (optional but recommended)
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to build and gate (workflow_dispatch only)"
+        required: true
+
+permissions:
+  contents: write   # needed to create the release on success
+
+# One staging site. A release gate and a PR gate must never deploy over each
+# other — whichever landed last is what gets scanned, and a false pass is worse
+# than no gate. Shares the group with a11y-staging-gate.yml on purpose.
+concurrency:
+  group: staging-site
+  cancel-in-progress: false
+
+jobs:
+  # --------------------------------------------------------------------------
+  # 1. Build the artifact. This zip is what gets gated and, if it passes, what
+  #    gets published — the same file, never rebuilt.
+  # --------------------------------------------------------------------------
+  build:
+    name: Build plugin zip
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      zip-name: ${{ steps.meta.outputs.zip-name }}
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Work out the version
+        id: meta
+        run: |
+          tag="${{ github.event.inputs.tag || github.ref_name }}"
+          version="${tag#v}"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "zip-name=wp-notice-signup-$version.zip" >> "$GITHUB_OUTPUT"
+
+      - name: Check the plugin header matches the tag
+        run: |
+          header_version=$(grep -m1 "^ \* Version:" wp-notice-signup.php | awk '{print $3}')
+          if [ "$header_version" != "${{ steps.meta.outputs.version }}" ]; then
+            echo "::error::Tag says ${{ steps.meta.outputs.version }} but the plugin header says $header_version. WordPress uses the header, so the tag would be a lie." >&2
+            exit 1
+          fi
+
+      - name: Build the zip
+        run: |
+          # What a user installs: the plugin, without the test harness, the
+          # workflows or the local Docker environment.
+          mkdir -p build/wp-notice-signup
+          rsync -a --exclude .git --exclude node_modules --exclude tests \
+                --exclude scripts --exclude .github --exclude artifacts \
+                --exclude test-results --exclude 'docker-compose*' \
+                --exclude playwright.config.ts --exclude 'package*.json' \
+                --exclude docs --exclude '.env*' \
+                ./ build/wp-notice-signup/
+          cd build
+          zip -rq "${{ steps.meta.outputs.zip-name }}" wp-notice-signup
+          unzip -l "${{ steps.meta.outputs.zip-name }}"
+
+      - name: Upload the artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: plugin-zip
+          path: build/${{ steps.meta.outputs.zip-name }}
+          if-no-files-found: error
+
+  # --------------------------------------------------------------------------
+  # 2. Install the built zip on staging and scan it.
+  # --------------------------------------------------------------------------
+  gate:
+    name: Release Accessibility Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: build
+
+    env:
+      WORDPRESS_BASE_URL: ${{ secrets.DEPLOY_BASE_URL }}
+      WP_ADMIN_USER: ${{ secrets.DEPLOY_WP_ADMIN_USER }}
+      WP_ADMIN_PASSWORD: ${{ secrets.DEPLOY_WP_ADMIN_PASSWORD }}
+      SCAN_PLUGIN: "1"
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Download the built zip
+        uses: actions/download-artifact@v5
+        with:
+          name: plugin-zip
+          path: build
+
+      - name: Validate required staging secrets are set
+        run: |
+          missing=""
+          for name in DEPLOY_SSH_HOST DEPLOY_SSH_USER DEPLOY_REMOTE_PATH DEPLOY_BASE_URL; do
+            value="${!name:-}"
+            if [ -z "$value" ]; then
+              missing="$missing $name"
+            fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Missing required secret(s):$missing." >&2
+            exit 1
+          fi
+        env:
+          DEPLOY_SSH_HOST: ${{ secrets.DEPLOY_SSH_HOST }}
+          DEPLOY_SSH_USER: ${{ secrets.DEPLOY_SSH_USER }}
+          DEPLOY_REMOTE_PATH: ${{ secrets.DEPLOY_REMOTE_PATH }}
+          DEPLOY_BASE_URL: ${{ secrets.DEPLOY_BASE_URL }}
+
+      - name: Configure the deploy key
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          if [ -n "${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}" ]; then
+            printf '%s\n' "${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          else
+            echo "::warning::DEPLOY_SSH_KNOWN_HOSTS not set — trusting the host key on first connect. Set it (output of 'ssh-keyscan -H your-host') to pin it."
+            ssh-keyscan -H "${{ secrets.DEPLOY_SSH_HOST }}" >> ~/.ssh/known_hosts
+          fi
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Install lftp when deploying over SFTP
+        if: ${{ (vars.DEPLOY_TRANSPORT || 'sftp') == 'sftp' }}
+        run: sudo apt-get update && sudo apt-get install -y lftp
+
+      # The unpacked zip is what goes to staging — not the working tree. If the
+      # build dropped a file, this is where that shows up.
+      #
+      # Only the built plugin. The staging site is somebody else's; we install
+      # into it, we do not rebuild it.
+      - name: Unpack the artifact and upload it to staging
+        env:
+          DEPLOY_TRANSPORT: ${{ vars.DEPLOY_TRANSPORT || 'sftp' }}
+          DEPLOY_SSH_HOST: ${{ secrets.DEPLOY_SSH_HOST }}
+          DEPLOY_SSH_USER: ${{ secrets.DEPLOY_SSH_USER }}
+        run: |
+          cd build
+          unzip -q "${{ needs.build.outputs.zip-name }}"
+          cd ..
+          scripts/deploy-to-staging.sh "build/wp-notice-signup" "${{ secrets.DEPLOY_REMOTE_PATH }}"
+
+      - name: Wait for staging to serve the new code
+        run: |
+          for attempt in $(seq 1 30); do
+            if curl --silent --fail "$WORDPRESS_BASE_URL/wp-login.php" >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::Staging did not respond at $WORDPRESS_BASE_URL after 60s." >&2
+          exit 1
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Cache Playwright browser binary
+        uses: actions/cache@v4
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ hashFiles('package-lock.json') }}
+
+      - name: Install Playwright browser
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+
+      - name: Install Playwright OS dependencies only
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+
+      - name: Scan staging
+        id: playwright
+        continue-on-error: true
+        run: npm run test:a11y
+
+      - name: Combine per-page scans into one results file
+        if: always()
+        run: npm run aggregate:a11y
+
+      - name: Report and enforce threshold
+        if: always()
+        continue-on-error: true
+        uses: pattonwebz/axe-report-action@v0.0.3
+        with:
+          results-file: artifacts/axe-results.json
+          fail-on: serious
+          show-personas: true
+
+      - name: Upload accessibility artifacts
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: a11y-results-release
+          path: |
+            artifacts/axe-results.json
+            artifacts/a11y/raw
+            artifacts/playwright-report
+          if-no-files-found: warn
+
+      # The gate. Everything above still uploads its artifacts on a failure —
+      # this is the step that stops the release.
+      - name: Fail when accessibility checks fail
+        if: steps.playwright.outcome == 'failure'
+        run: |
+          echo "::error::The built artifact failed its accessibility scan. This release will not be published." >&2
+          exit 1
+
+  # --------------------------------------------------------------------------
+  # 3. Publish. Reached only when the gate passed.
+  # --------------------------------------------------------------------------
+  publish:
+    name: Publish release
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [build, gate]
+
+    steps:
+      - name: Download the built zip
+        uses: actions/download-artifact@v5
+        with:
+          name: plugin-zip
+          path: build
+
+      # The same file that was scanned, not a rebuild. Rebuilding here would
+      # publish an artifact nothing has tested.
+      - name: Create the release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          name: wp-notice-signup ${{ needs.build.outputs.version }}
+          files: build/${{ needs.build.outputs.zip-name }}
+          body: |
+            Accessibility gate passed against staging before publication.
+
+            The attached zip is the exact artifact that was installed and
+            scanned — it has not been rebuilt.

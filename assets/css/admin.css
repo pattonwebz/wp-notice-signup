@@ -1,0 +1,174 @@
+/* wp-notice-signup — admin settings screen.
+ *
+ * The admin screen is a real surface with real users. It gets the same contrast
+ * discipline as the front end. The previous version used #8f96a3 on white
+ * (2.8:1) for intro copy and #b3bac5 on #eff3f8 (1.7:1) inside the preview
+ * card — both unreadable, and both the kind of thing that survives review
+ * because the person reviewing can read it fine on their own monitor. */
+
+.wpns-admin-page .wpns-admin-intro {
+	max-width: 60ch;
+	color: #45505f;          /* 8.3:1 on the wp-admin white background */
+	font-size: 14px;
+}
+
+.wpns-admin-grid {
+	display: grid;
+	gap: 20px;
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+	align-items: start;
+	margin-top: 16px;
+}
+
+.wpns-settings-card,
+.wpns-preview-card {
+	padding: 20px;
+	border: 1px solid #c3c9d2;
+	border-radius: 8px;
+	background: #ffffff;
+	color: #1d2530;
+}
+
+.wpns-settings-card h2,
+.wpns-preview-card h2 {
+	margin-top: 0;
+	font-size: 1.05rem;
+}
+
+.wpns-settings-card h3,
+.wpns-preview-card h3 {
+	margin-bottom: 4px;
+	font-size: 0.95rem;
+}
+
+.wpns-settings-card label {
+	display: block;
+	margin-bottom: 4px;
+	font-weight: 600;
+}
+
+.wpns-settings-card input[type="text"],
+.wpns-settings-card textarea {
+	width: 100%;
+	max-width: 32rem;
+}
+
+/* Checkbox labels wrap their input, so they must not also be display:block
+   with a margin — that separates the control from its text visually. */
+.wpns-settings-card label:has(input[type="checkbox"]) {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-weight: 400;
+}
+
+.wpns-microcopy {
+	max-width: 60ch;
+	color: #45505f;
+	font-size: 13px;
+}
+
+.wpns-preview-banner {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	margin: 12px 0 20px;
+	padding: 14px;
+	border: 1px solid #c3c9d2;
+	border-radius: 10px;
+	background: #f4f7fb;
+	color: #1d2530;          /* 13.6:1 on that tint */
+}
+
+.wpns-preview-banner__image {
+	width: 48px;
+	height: 48px;
+	flex: 0 0 auto;
+}
+
+.wpns-preview-banner h3 {
+	margin: 0 0 2px;
+	font-size: 0.95rem;
+}
+
+.wpns-preview-banner p {
+	margin: 0;
+	color: #404a58;          /* 8.9:1 on the tint */
+	font-size: 13px;
+}
+
+.wpns-icon-button {
+	margin-left: auto;
+	flex: 0 0 auto;
+}
+
+.wpns-issue-list {
+	margin: 8px 0 0;
+	padding: 0;
+	list-style: none;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	font-size: 13px;
+}
+
+.wpns-issue-list li {
+	display: flex;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 6px 10px;
+	border-radius: 6px;
+	background: #f4f7fb;
+	color: #1d2530;
+}
+
+.wpns-issue-list strong {
+	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	font-weight: 600;
+}
+
+.wpns-issue-list span {
+	color: #404a58;
+}
+
+/* wp-admin ships .screen-reader-text, but declaring it here keeps the icon
+   button's accessible name working even if that ever changes. */
+.wpns-admin-page .screen-reader-text {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	margin: -1px;
+	padding: 0;
+	overflow: hidden;
+	clip: rect(0 0 0 0);
+	clip-path: inset(50%);
+	white-space: nowrap;
+	border: 0;
+}
+
+/* ==========================================================================
+   DEMO FAILURE STYLES — admin screen
+   Active only when the color_contrast flag is on. The values are the ones this
+   plugin actually shipped, not exaggerated ones.
+   ========================================================================== */
+
+.wpns-settings-card.wpns-demo-low-contrast .wpns-field-caption,
+.wpns-preview-card.wpns-demo-low-contrast .wpns-microcopy {
+	color: #8f96a3;          /* 2.8:1 on white */
+}
+
+.wpns-preview-card.wpns-demo-low-contrast .wpns-preview-banner {
+	background: #eff3f8;
+}
+
+.wpns-preview-card.wpns-demo-low-contrast .wpns-preview-banner p,
+.wpns-preview-card.wpns-demo-low-contrast .wpns-issue-list span {
+	color: #b3bac5;          /* 1.7:1 on that tint */
+}
+
+/* missing_labels, admin side. */
+.wpns-settings-card .wpns-field-caption {
+	display: block;
+	margin-bottom: 4px;
+	font-weight: 600;
+}

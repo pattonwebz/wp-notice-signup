@@ -1,0 +1,218 @@
+name: Staging accessibility gate
+
+# The merge gate.
+#
+#   PR opened/updated  →  deploy the branch to staging  →  scan staging
+#
+# If the scan fails, this workflow fails, the PR's required check goes red, and
+# GitHub disables the merge button. Nothing reaches production because nothing
+# gets merged.
+#
+# IMPORTANT: this file alone blocks nothing. The block comes from branch
+# protection. After the first run, go to:
+#
+#   Settings > Branches > Add rule for `main`
+#     [x] Require status checks to pass before merging
+#     [x] Select "Scan staging"   (the job's `name:`, not the file name)
+#
+# Until that box is ticked, a failing scan is just a red X somebody can ignore.
+#
+# Production deployment is a separate workflow (a11y-deploy-production.yml)
+# that runs on push to `main` — i.e. on merge. The gate here is what decides
+# whether that merge is allowed to happen.
+#
+# Required repository secrets (Settings > Secrets and variables > Actions):
+#   DEPLOY_SSH_HOST            e.g. staging.example.com
+#   DEPLOY_SSH_USER            SSH user with write access to the plugin path
+#   DEPLOY_SSH_PRIVATE_KEY     Private key for a deploy-only key pair, no passphrase
+#   DEPLOY_REMOTE_PATH         Absolute path to the plugin folder on staging,
+#                              e.g. /var/www/html/wp-content/plugins/wp-notice-signup/
+#   DEPLOY_BASE_URL            e.g. https://staging.example.com (no trailing slash)
+#   DEPLOY_WP_ADMIN_USER       Admin username on staging
+#   DEPLOY_WP_ADMIN_PASSWORD   Admin password on staging
+#   DEPLOY_SSH_KNOWN_HOSTS     Optional but recommended: output of `ssh-keyscan -H <host>`
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One staging site, one PR at a time. Without this, two PRs deploy over each
+# other and both get scanned against whichever landed last — a false pass is
+# worse than no gate. a11y-release-gate.yml shares this group for the same
+# reason.
+concurrency:
+  group: staging-site
+  cancel-in-progress: false
+
+jobs:
+  # --------------------------------------------------------------------------
+  # 1. Put this branch's code on staging.
+  # --------------------------------------------------------------------------
+  deploy-staging:
+    name: Deploy branch to staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Secrets are not available to pull_request runs from forks, so a fork PR
+    # would fail with confusing SSH errors instead of a clear message. Only
+    # same-repo branches can claim the staging site.
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
+
+    steps:
+      - name: Check out the pull request's code
+        uses: actions/checkout@v5
+
+      - name: Validate required staging secrets are set
+        run: |
+          missing=""
+          for name in DEPLOY_SSH_HOST DEPLOY_SSH_USER DEPLOY_REMOTE_PATH DEPLOY_BASE_URL; do
+            value="${!name:-}"
+            if [ -z "$value" ]; then
+              missing="$missing $name"
+            fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Missing required secret(s):$missing. Refusing to mirror with --delete to an incomplete destination." >&2
+            exit 1
+          fi
+          case "$DEPLOY_REMOTE_PATH" in
+            /*) ;;
+            *)
+              echo "::error::DEPLOY_REMOTE_PATH ('$DEPLOY_REMOTE_PATH') must be an absolute path to the plugin folder. A relative or empty value can make rsync --delete target the wrong directory." >&2
+              exit 1
+              ;;
+          esac
+        env:
+          DEPLOY_SSH_HOST: ${{ secrets.DEPLOY_SSH_HOST }}
+          DEPLOY_SSH_USER: ${{ secrets.DEPLOY_SSH_USER }}
+          DEPLOY_REMOTE_PATH: ${{ secrets.DEPLOY_REMOTE_PATH }}
+          DEPLOY_BASE_URL: ${{ secrets.DEPLOY_BASE_URL }}
+
+      - name: Configure staging SSH key
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          if [ -n "${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}" ]; then
+            printf '%s\n' "${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          else
+            echo "::warning::DEPLOY_SSH_KNOWN_HOSTS not set — trusting this server's host key on first connect (TOFU) via ssh-keyscan. Set that secret (output of 'ssh-keyscan -H your-host') to pin it instead and detect MITM/host-key changes."
+            ssh-keyscan -H "${{ secrets.DEPLOY_SSH_HOST }}" >> ~/.ssh/known_hosts
+          fi
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Install lftp when deploying over SFTP
+        if: ${{ (vars.DEPLOY_TRANSPORT || 'sftp') == 'sftp' }}
+        run: sudo apt-get update && sudo apt-get install -y lftp
+
+      # Only this plugin. The site on the other end belongs to somebody else —
+      # its theme, its content and its other plugins are not ours to deploy, and
+      # overwriting them would make the scan a test of our fixture rather than a
+      # test of how this plugin behaves in a site it does not control.
+      - name: Deploy the plugin to staging
+        env:
+          DEPLOY_TRANSPORT: ${{ vars.DEPLOY_TRANSPORT || 'sftp' }}
+          DEPLOY_SSH_HOST: ${{ secrets.DEPLOY_SSH_HOST }}
+          DEPLOY_SSH_USER: ${{ secrets.DEPLOY_SSH_USER }}
+        run: |
+          scripts/deploy-to-staging.sh . "${{ secrets.DEPLOY_REMOTE_PATH }}"
+
+      - name: Wait for staging to serve the new code
+        env:
+          WORDPRESS_BASE_URL: ${{ secrets.DEPLOY_BASE_URL }}
+        run: |
+          for attempt in $(seq 1 30); do
+            if curl --silent --fail "$WORDPRESS_BASE_URL/wp-login.php" >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::Staging did not respond at $WORDPRESS_BASE_URL after 60s." >&2
+          exit 1
+
+  # --------------------------------------------------------------------------
+  # 2. Scan the real staging site. THIS is the job to require in branch
+  #    protection — its name, "Scan staging", is what you tick in Settings.
+  # --------------------------------------------------------------------------
+  scan-staging:
+    name: Scan staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: deploy-staging
+
+    env:
+      WORDPRESS_BASE_URL: ${{ secrets.DEPLOY_BASE_URL }}
+      WP_ADMIN_USER: ${{ secrets.DEPLOY_WP_ADMIN_USER }}
+      WP_ADMIN_PASSWORD: ${{ secrets.DEPLOY_WP_ADMIN_PASSWORD }}
+
+    steps:
+      - name: Check out the pull request's code
+        uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Cache Playwright browser binary
+        uses: actions/cache@v4
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ hashFiles('package-lock.json') }}
+
+      - name: Install Playwright browser
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+
+      - name: Install Playwright OS dependencies only
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+
+      - name: Run Playwright accessibility tests against staging
+        id: playwright
+        continue-on-error: true
+        run: npm run test:a11y
+
+      - name: Combine per-page scans into one results file
+        if: always()
+        run: npm run aggregate:a11y
+
+      - name: Report and enforce threshold
+        if: always()
+        continue-on-error: true
+        uses: pattonwebz/axe-report-action@v0.0.3
+        with:
+          results-file: artifacts/axe-results.json
+          fail-on: serious
+          show-personas: true
+
+      - name: Upload accessibility artifacts
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: a11y-results-staging
+          path: |
+            artifacts/axe-results.json
+            artifacts/a11y/raw
+            artifacts/playwright-results.json
+            artifacts/playwright-report
+            test-results
+          if-no-files-found: warn
+
+      # The gate. Everything above still runs and still uploads its artifacts on
+      # a failing scan — this is the step that turns the PR's check red and,
+      # with branch protection on, disables the merge button.
+      - name: Fail when accessibility checks fail
+        if: steps.playwright.outcome == 'failure'
+        run: |
+          echo "::error::Staging failed its accessibility scan. This PR cannot be merged until it passes." >&2
+          exit 1

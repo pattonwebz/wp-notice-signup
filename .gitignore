@@ -1,0 +1,12 @@
+node_modules/
+artifacts/
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+
+# Local environment; never commit. See .env.example.
+.env
+
+# NFS leaves these behind when a file is replaced while open.
+.nfs*
