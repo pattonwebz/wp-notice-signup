@@ -536,11 +536,9 @@ class WP_Notice_Signup_Plugin {
 				</p>
 			<?php else : ?>
 				<p>
-					<label for="<?php echo esc_attr( $name_id ); ?>"><?php echo esc_html( $settings['name_label'] ); ?></label>
 					<input id="<?php echo esc_attr( $name_id ); ?>" type="text" name="wpns_name" autocomplete="given-name">
 				</p>
 				<p>
-					<label for="<?php echo esc_attr( $email_id ); ?>"><?php echo esc_html( $settings['email_label'] ); ?></label>
 					<input id="<?php echo esc_attr( $email_id ); ?>" type="email" name="wpns_email" autocomplete="email">
 				</p>
 			<?php endif; ?>
