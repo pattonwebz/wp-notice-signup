@@ -85,6 +85,9 @@ deliberate failures behind named flags, filterable via `wp_notice_signup_demo_is
 'button_name'          => false,
 'aria_hidden_focus'    => false,
 'duplicate_active_ids' => false,
+'icon_banner_cta'      => false,
+'empty_submit'         => false,
+'select_name'          => false,
 ```
 
 **All of these now default to `false`, and must stay that way.** The baseline has to be clean, or
@@ -122,6 +125,9 @@ Verified individually against WordPress, not assumed:
 | `missing_labels` | `label` (critical) | Contact page, admin |
 | `button_name` | `button-name` (critical) | Admin settings screen |
 | `aria_hidden_focus` | `aria-hidden-focus` (serious) | Every front-end page |
+| `icon_banner_cta` | `button-name` (critical) | Front-end banner CTA |
+| `empty_submit` | `button-name` (critical) | Front-end + modal submit |
+| `select_name` | `select-name` (serious) | Front-end + modal frequency dropdown |
 | `heading_order` | **Nothing under the default ruleset.** `heading-order` (moderate) only with `AXE_TAGS=wcag2a,wcag2aa,best-practice` | Admin settings screen |
 | `duplicate_active_ids` | **Nothing.** Real bug, undetectable — see below | Contact page |
 
@@ -226,6 +232,34 @@ The banner's dismiss control is a `<button>` containing only an icon glyph or an
 A `<div onclick>` acting as the banner's call to action: not focusable, not announced as a control,
 not operable by keyboard or by Enter/Space.
 
+### F7. Icon-only call to action
+
+**Rule:** `button-name` · **Impact:** critical
+
+The banner's primary CTA becomes a bare `<button>` containing only an arrow glyph marked
+`aria-hidden`. Screen readers announce "button" with no hint of what it does.
+
+**Realism:** high. "Clean up" of a button to a single glyph happens constantly in marketing banners.
+
+### F8. Empty submit button
+
+**Rule:** `button-name` · **Impact:** critical
+
+The signup form's submit button contains only a decorative arrow. The accessible name is empty, so
+assistive tech announces "button" — and a keyboard user cannot tell what submitting will do.
+
+**Realism:** high. Icon-only buttons with no text or visually-hidden label are a classic.
+
+### F9. Unlabelled select
+
+**Rule:** `select-name` · **Impact:** serious
+
+A "How often" frequency dropdown is labelled with a `<span>` that looks like a label but is not
+one. The select has no accessible name and cannot be focused by clicking its caption.
+
+**Realism:** very high. Same caption/label confusion as A1, on a `<select>` — a control axe checks
+with its own `select-name` rule.
+
 ---
 
 ## Admin-screen failure modes
@@ -305,6 +339,7 @@ The two gate patterns want different failures. Using the same one twice wastes t
 | --- | --- | --- |
 | **Pattern 1 — block on PR merge** | F1 sitewide bleed + F2 contrast | Visual, instant, and the violation count across eleven pages makes the argument by itself. A reviewer would not have caught it by reading the diff. |
 | **Pattern 2 — block on release** | A1 span-labelled field + A4 icon button | Admin-only, invisible from the front end, and exactly the kind of thing that ships in a plugin zip to thousands of sites. Reinforces that the release artifact is what needs gating, not just the source. |
+| **Kitchen sink** | Every flag on at once | Front-end damage (contrast, alt, labels, icon-only controls, aria-hidden modal) *and* admin damage (contrast, labels, gear button) in one PR. The report shows the full breadth of what a WCAG-tagged scan can catch across both surfaces. |
 | **Neither — narrate only** | F4 placeholder-instead-of-label | The scan passes. Use it for the honesty beat, not as a gate demo. |
 
 Splitting them this way also means the second demo is not "the same red check again": the first
