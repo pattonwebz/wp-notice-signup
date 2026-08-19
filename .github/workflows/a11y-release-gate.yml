@@ -234,6 +234,16 @@ jobs:
           fail-on: serious
           show-personas: true
 
+      # Render a standalone HTML report (like demo-bakery's pr-gate-scan.yml).
+      - name: Render HTML report
+        if: always()
+        id: html
+        uses: pattonwebz/axe-html-report-action@v0.0.2
+        with:
+          results-file: artifacts/axe-results.json
+          output-file: artifacts/axe-report-release.html
+          title: WP Notice Signup release accessibility gate report
+
       - name: Upload accessibility artifacts
         if: always()
         uses: actions/upload-artifact@v5
@@ -241,6 +251,7 @@ jobs:
           name: a11y-results-release
           path: |
             artifacts/axe-results.json
+            artifacts/axe-report-release.html
             artifacts/a11y/raw
             artifacts/playwright-report
           if-no-files-found: warn
