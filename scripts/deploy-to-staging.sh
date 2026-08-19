@@ -55,6 +55,11 @@ echo "Deploying '$local_dir' -> ${user}@${host}:${remote_path} via ${transport}"
 case "$transport" in
 	rsync)
 		rsync -avz --delete \
+			--exclude '.git*' \
+			--exclude 'node_modules' \
+			--exclude 'tests' \
+			--exclude 'artifacts' \
+			--exclude 'test-results' \
 			-e "ssh -i '$key' -o UserKnownHostsFile='$known_hosts'" \
 			"${local_dir}/" \
 			"${user}@${host}:${remote_path}/"
