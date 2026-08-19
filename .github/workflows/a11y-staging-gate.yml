@@ -154,6 +154,11 @@ jobs:
       WORDPRESS_BASE_URL: ${{ secrets.DEPLOY_BASE_URL }}
       WP_ADMIN_USER: ${{ secrets.DEPLOY_WP_ADMIN_USER }}
       WP_ADMIN_PASSWORD: ${{ secrets.DEPLOY_WP_ADMIN_PASSWORD }}
+      # Scan the plugin's own surfaces too — its modal-open state and its admin
+      # settings screen. Without this the gate only sees the host pages, and a
+      # regression inside the plugin's own markup (like a missing label) sails
+      # through. The release gate already sets this; the merge gate should too.
+      SCAN_PLUGIN: "1"
 
     steps:
       - name: Check out the pull request's code
