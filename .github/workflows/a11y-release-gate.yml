@@ -201,8 +201,8 @@ jobs:
       - name: Install Node dependencies
         run: npm ci
 
-      - name: Cache Playwright browser binary
-        uses: actions/cache@v4
+      - name: Restore Playwright browser cache
+        uses: actions/cache/restore@v4
         id: playwright-cache
         with:
           path: ~/.cache/ms-playwright
@@ -215,6 +215,16 @@ jobs:
       - name: Install Playwright OS dependencies only
         if: steps.playwright-cache.outputs.cache-hit == 'true'
         run: npx playwright install-deps chromium
+
+      # Save the browser cache even when the scan fails — actions/cache only
+      # saves on job success by default, and this job is *supposed* to fail on
+      # violations, so the cache would otherwise never persist.
+      - name: Save Playwright browser cache
+        if: always() && steps.playwright-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ hashFiles('package-lock.json') }}
 
       - name: Scan staging
         id: playwright
