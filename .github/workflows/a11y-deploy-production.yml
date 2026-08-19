@@ -70,28 +70,20 @@ jobs:
           PROD_REMOTE_PATH: ${{ secrets.PROD_REMOTE_PATH }}
           PROD_BASE_URL: ${{ secrets.PROD_BASE_URL }}
 
-      - name: Configure production SSH key
+      - name: Configure production SSH key + known_hosts
+        env:
+          KNOWN_HOSTS: ${{ secrets.PROD_SSH_KNOWN_HOSTS }}
         run: |
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
           printf '%s\n' "${{ secrets.PROD_SSH_PRIVATE_KEY }}" > ~/.ssh/prod_key
           chmod 600 ~/.ssh/prod_key
-
-      # Separate step: the KNOWN_HOSTS value is multi-line, so it must not go
-      # through a shell `if [ -n ... ]` check.
-      - name: Write known_hosts from secret
-        if: ${{ secrets.PROD_SSH_KNOWN_HOSTS != '' }}
-        run: |
-          mkdir -p ~/.ssh
-          printf '%s\n' "${{ secrets.PROD_SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
-          chmod 600 ~/.ssh/known_hosts
-
-      - name: Trust production host key (TOFU)
-        if: ${{ secrets.PROD_SSH_KNOWN_HOSTS == '' }}
-        run: |
-          mkdir -p ~/.ssh
-          echo "::warning::PROD_SSH_KNOWN_HOSTS not set — trusting this server's host key on first connect (TOFU) via ssh-keyscan. Set that secret (output of 'ssh-keyscan -H your-host') to pin it instead."
-          ssh-keyscan -H "${{ secrets.PROD_SSH_HOST }}" >> ~/.ssh/known_hosts
+          if [ -n "${KNOWN_HOSTS}" ] && printf '%s' "${KNOWN_HOSTS}" | grep -q .; then
+            printf '%s\n' "${KNOWN_HOSTS}" > ~/.ssh/known_hosts
+          else
+            echo "::warning::PROD_SSH_KNOWN_HOSTS not set — trusting this server's host key on first connect (TOFU) via ssh-keyscan. Set that secret (output of 'ssh-keyscan -H your-host') to pin it instead."
+            ssh-keyscan -H "${{ secrets.PROD_SSH_HOST }}" >> ~/.ssh/known_hosts
+          fi
           chmod 600 ~/.ssh/known_hosts
 
       - name: Install lftp when deploying over SFTP
