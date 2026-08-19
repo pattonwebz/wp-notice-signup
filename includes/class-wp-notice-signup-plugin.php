@@ -248,26 +248,18 @@ class WP_Notice_Signup_Plugin {
 					<?php endif; ?>
 
 					<p>
-						<label for="wpns_notice_text"><?php esc_html_e( 'Notice text', 'wp-notice-signup' ); ?></label>
 						<textarea id="wpns_notice_text" name="wp_notice_signup_settings[notice_text]" rows="3"><?php echo esc_textarea( $settings['notice_text'] ); ?></textarea>
 					</p>
 
 					<p>
-						<?php if ( $this->demo( 'missing_labels' ) ) : ?>
-							<span class="wpns-field-caption"><?php esc_html_e( 'Button text', 'wp-notice-signup' ); ?></span>
-						<?php else : ?>
-							<label for="wpns_button_text"><?php esc_html_e( 'Button text', 'wp-notice-signup' ); ?></label>
-						<?php endif; ?>
 						<input id="wpns_button_text" type="text" name="wp_notice_signup_settings[button_text]" value="<?php echo esc_attr( $settings['button_text'] ); ?>">
 					</p>
 
 					<p>
-						<label for="wpns_form_heading"><?php esc_html_e( 'Form heading', 'wp-notice-signup' ); ?></label>
 						<input id="wpns_form_heading" type="text" name="wp_notice_signup_settings[form_heading]" value="<?php echo esc_attr( $settings['form_heading'] ); ?>">
 					</p>
 
 					<p>
-						<label for="wpns_email_label"><?php esc_html_e( 'Email field label', 'wp-notice-signup' ); ?></label>
 						<input id="wpns_email_label" type="text" name="wp_notice_signup_settings[email_label]" value="<?php echo esc_attr( $settings['email_label'] ); ?>">
 					</p>
 
