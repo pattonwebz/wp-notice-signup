@@ -93,18 +93,19 @@ jobs:
 
       - name: Configure staging SSH key + known_hosts
         env:
-          KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
+          # Base64-encoded `ssh-keyscan -H <host>` output. Storing it encoded
+          # keeps it a single line, so it survives GitHub's secret/env handling
+          # (a raw multi-line secret breaks shell checks and env injection).
+          KNOWN_HOSTS_B64: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
         run: |
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
           printf '%s\n' "${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          # KNOWN_HOSTS is multi-line; a shell `[ -n "$VAR" ]` check would break
-          # on the newlines, so test the file instead.
-          if [ -n "${KNOWN_HOSTS}" ] && printf '%s' "${KNOWN_HOSTS}" | grep -q .; then
-            printf '%s\n' "${KNOWN_HOSTS}" > ~/.ssh/known_hosts
+          if [ -n "${KNOWN_HOSTS_B64}" ]; then
+            printf '%s' "${KNOWN_HOSTS_B64}" | base64 -d > ~/.ssh/known_hosts
           else
-            echo "::warning::DEPLOY_SSH_KNOWN_HOSTS not set — trusting this server's host key on first connect (TOFU) via ssh-keyscan. Set that secret (output of 'ssh-keyscan -H your-host') to pin it instead and detect MITM/host-key changes."
+            echo "::warning::DEPLOY_SSH_KNOWN_HOSTS not set — trusting this server's host key on first connect (TOFU) via ssh-keyscan. Set that secret (output of 'ssh-keyscan -H your-host' | base64 -w0) to pin it instead and detect MITM/host-key changes."
             ssh-keyscan -H "${{ secrets.DEPLOY_SSH_HOST }}" >> ~/.ssh/known_hosts
           fi
           chmod 600 ~/.ssh/known_hosts

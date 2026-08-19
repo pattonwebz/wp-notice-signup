@@ -147,16 +147,16 @@ jobs:
 
       - name: Configure the deploy key + known_hosts
         env:
-          KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
+          KNOWN_HOSTS_B64: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
         run: |
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
           printf '%s\n' "${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          if [ -n "${KNOWN_HOSTS}" ] && printf '%s' "${KNOWN_HOSTS}" | grep -q .; then
-            printf '%s\n' "${KNOWN_HOSTS}" > ~/.ssh/known_hosts
+          if [ -n "${KNOWN_HOSTS_B64}" ]; then
+            printf '%s' "${KNOWN_HOSTS_B64}" | base64 -d > ~/.ssh/known_hosts
           else
-            echo "::warning::DEPLOY_SSH_KNOWN_HOSTS not set — trusting the host key on first connect. Set it (output of 'ssh-keyscan -H your-host') to pin it."
+            echo "::warning::DEPLOY_SSH_KNOWN_HOSTS not set — trusting the host key on first connect. Set it (output of 'ssh-keyscan -H your-host' | base64 -w0) to pin it."
             ssh-keyscan -H "${{ secrets.DEPLOY_SSH_HOST }}" >> ~/.ssh/known_hosts
           fi
           chmod 600 ~/.ssh/known_hosts
