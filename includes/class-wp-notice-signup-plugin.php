@@ -386,7 +386,13 @@ class WP_Notice_Signup_Plugin {
 					<?php endif; ?>
 					<p><?php echo esc_html( $settings['notice_text'] ); ?></p>
 				</div>
-				<button type="button" class="wpns-banner__button" data-wpns-open-modal="true"><?php echo esc_html( $settings['button_text'] ); ?></button>
+				<?php if ( $this->demo( 'icon_banner_cta' ) ) : ?>
+					<button type="button" class="wpns-banner__button wpns-banner__button--icon" data-wpns-open-modal="true">
+						<span aria-hidden="true">&#8594;</span>
+					</button>
+				<?php else : ?>
+					<button type="button" class="wpns-banner__button" data-wpns-open-modal="true"><?php echo esc_html( $settings['button_text'] ); ?></button>
+				<?php endif; ?>
 			</div>
 		</section>
 
@@ -544,8 +550,21 @@ class WP_Notice_Signup_Plugin {
 					<input id="<?php echo esc_attr( $email_id ); ?>" type="email" name="wpns_email" autocomplete="email">
 				</p>
 			<?php endif; ?>
+			<?php if ( $this->demo( 'select_name' ) ) : ?>
+				<p>
+					<span class="wpns-field-caption"><?php esc_html_e( 'How often', 'wp-notice-signup' ); ?></span>
+					<select name="wpns_frequency" id="wpns-frequency-<?php echo esc_attr( $uid ); ?>">
+						<option value="weekly"><?php esc_html_e( 'Weekly digest', 'wp-notice-signup' ); ?></option>
+						<option value="monthly"><?php esc_html_e( 'Monthly roundup', 'wp-notice-signup' ); ?></option>
+					</select>
+				</p>
+			<?php endif; ?>
 			<p>
-				<button type="submit"><?php esc_html_e( 'Join list', 'wp-notice-signup' ); ?></button>
+				<?php if ( $this->demo( 'empty_submit' ) ) : ?>
+					<button type="submit"><span aria-hidden="true">&#10148;</span></button>
+				<?php else : ?>
+					<button type="submit"><?php esc_html_e( 'Join list', 'wp-notice-signup' ); ?></button>
+				<?php endif; ?>
 			</p>
 			<p class="wpns-success-message"><?php echo esc_html( $settings['success_message'] ); ?></p>
 		</form>
@@ -570,13 +589,16 @@ class WP_Notice_Signup_Plugin {
 	 */
 	protected function get_demo_issue_flags() {
 		$flags = array(
-			'missing_labels'       => false,
-			'color_contrast'       => false,
-			'missing_alt_text'     => false,
-			'heading_order'        => false,
-			'button_name'          => false,
-			'aria_hidden_focus'    => false,
-			'duplicate_active_ids' => false,
+			'missing_labels'       => true,
+			'color_contrast'       => true,
+			'missing_alt_text'     => true,
+			'heading_order'        => true,
+			'button_name'          => true,
+			'aria_hidden_focus'    => true,
+			'duplicate_active_ids' => true,
+			'icon_banner_cta'      => true,
+			'empty_submit'         => true,
+			'select_name'          => true,
 			'manual_issue_hook'    => false,
 		);
 

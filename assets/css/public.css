@@ -71,6 +71,16 @@
 	background: #16375f;
 }
 
+/* icon_banner_cta: icon-only CTA. Sized to match the text button it replaces. */
+.wpns-banner__button--icon {
+	width: 44px;
+	height: 44px;
+	padding: 0;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+}
+
 /* --- Modal ---------------------------------------------------------------
  * Hidden with the `hidden` attribute from JS, so no off-screen positioning
  * trick is needed. The old version parked it at left:-9999px while leaving it
