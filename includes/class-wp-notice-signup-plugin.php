@@ -582,7 +582,7 @@ class WP_Notice_Signup_Plugin {
 	protected function get_demo_issue_flags() {
 		$flags = array(
 			'missing_labels'       => false,
-			'color_contrast'       => false,
+			'color_contrast'       => true,
 			'missing_alt_text'     => false,
 			'heading_order'        => false,
 			'button_name'          => false,
