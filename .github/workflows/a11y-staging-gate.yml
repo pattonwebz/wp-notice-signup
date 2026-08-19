@@ -39,6 +39,7 @@ on:
 
 permissions:
   contents: read
+  checks: write   # publish the a11y report to the check run summary
 
 # One staging site, one PR at a time. Without this, two PRs deploy over each
 # other and both get scanned against whichever landed last — a false pass is
@@ -199,6 +200,41 @@ jobs:
           results-file: artifacts/axe-results.json
           fail-on: serious
           show-personas: true
+
+      # axe-report-action writes its report to the job summary (run page).
+      # Surface the same content on the check run itself, so the PR checks tab
+      # shows the findings without opening the run.
+      - name: Publish report to check run summary
+        if: always()
+        continue-on-error: true
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const summaryFile = process.env.GITHUB_STEP_SUMMARY;
+            let summary = '';
+            if (fs.existsSync(summaryFile)) {
+              summary = fs.readFileSync(summaryFile, 'utf8');
+            }
+            const checkRunId = context.payload.check_run?.id
+              ?? (await github.rest.actions.listJobsForWorkflowRun({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                run_id: context.runId,
+              })).data.jobs.find(j => j.name === 'Scan staging')?.id;
+            if (!checkRunId) {
+              console.log('No check run id found; skipping summary publish.');
+              return;
+            }
+            await github.rest.checks.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              check_run_id: checkRunId,
+              output: {
+                title: 'Accessibility scan (axe-core)',
+                summary: summary || 'See the job summary for findings.',
+              },
+            });
 
       - name: Upload accessibility artifacts
         if: always()
