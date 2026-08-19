@@ -62,13 +62,13 @@
 	font: inherit;
 	font-size: 0.9375rem;
 	font-weight: 600;
-	background: #1f4b8f;
-	color: #ffffff;          /* 8.6:1 */
+	background: #0f5c5c;
+	color: #ffffff;          /* 6.9:1 on #0f5c5c — passes AA */
 }
 
 .wpns-banner__button:hover,
 .wpns-signup-form button:hover {
-	background: #16375f;
+	background: #0a4545;
 }
 
 /* --- Modal ---------------------------------------------------------------
