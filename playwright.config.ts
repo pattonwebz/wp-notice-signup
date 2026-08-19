@@ -26,7 +26,12 @@ export default defineConfig({
   ],
   use: {
     baseURL,
+    // CI uses the runner's preinstalled Google Chrome (channel: "chrome") so
+    // no browser download or apt OS-deps install is needed — the GitHub-hosted
+    // runner's apt mirrors are too slow/flaky. Local runs keep the bundled
+    // Chromium unless PLAYWRIGHT_USE_SYSTEM_CHROME is set.
     browserName: "chromium",
+    channel: process.env.PLAYWRIGHT_USE_SYSTEM_CHROME ? "chrome" : undefined,
     headless: true,
     trace: "on-first-retry",
     screenshot: "only-on-failure",
