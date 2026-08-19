@@ -210,11 +210,19 @@ jobs:
 
       - name: Install Playwright browser
         if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: npx playwright install --with-deps chromium
+        run: |
+          # GitHub runners point apt at azure.archive.ubuntu.com, which is
+          # often slow/unreachable from Actions and makes `--with-deps` hang on
+          # retries. Point apt at the main archive first so the browser's OS
+          # dependencies install in seconds instead of minutes.
+          sudo sed -i 's|azure.archive.ubuntu.com|archive.ubuntu.com|g' /etc/apt/sources.list.d/ubuntu.sources 2>/dev/null || true
+          npx playwright install --with-deps chromium
 
       - name: Install Playwright OS dependencies only
         if: steps.playwright-cache.outputs.cache-hit == 'true'
-        run: npx playwright install-deps chromium
+        run: |
+          sudo sed -i 's|azure.archive.ubuntu.com|archive.ubuntu.com|g' /etc/apt/sources.list.d/ubuntu.sources 2>/dev/null || true
+          npx playwright install-deps chromium
 
       # Save the browser cache even when the scan fails — actions/cache only
       # saves on job success by default, and this job is *supposed* to fail on
