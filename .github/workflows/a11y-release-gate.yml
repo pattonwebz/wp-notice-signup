@@ -230,6 +230,7 @@ jobs:
           npx playwright install --with-deps chromium
 
       - name: Install Playwright OS dependencies only
+        id: osdeps
         if: steps.playwright-cache.outputs.cache-hit == 'true'
         run: |
           sudo sed -i 's|azure.archive.ubuntu.com|archive.ubuntu.com|g' /etc/apt/sources.list.d/ubuntu.sources 2>/dev/null || true
@@ -238,8 +239,10 @@ jobs:
           npx playwright install-deps chromium
 
       # Save the downloaded .debs so the next run's install-deps is offline.
+      # Only save when install-deps actually completed — a cancelled/interrupted
+      # apt leaves no usable archives to cache.
       - name: Save apt archive cache
-        if: always() && steps.apt-cache.outputs.cache-hit != 'true'
+        if: steps.osdeps.outcome == 'success' && steps.apt-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
           path: /var/cache/apt/archives
