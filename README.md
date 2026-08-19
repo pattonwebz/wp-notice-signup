@@ -64,6 +64,9 @@ the better tool — that is what the static demo in this talk uses.
 
 Requires Node 18+, Docker, and a free port 8080.
 
+> Test note: this PR only touches documentation — the plugin's front-end and
+> admin markup are unchanged, so the staging scan should pass clean.
+
 ```bash
 npm install
 npx playwright install --with-deps chromium
