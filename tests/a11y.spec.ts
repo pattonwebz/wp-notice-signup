@@ -65,10 +65,13 @@ test.describe("WordPress accessibility smoke checks", () => {
         `Expected ${target.path} to respond ${expectedStatus} before running axe-core.`
       ).toBe(expectedStatus);
 
-      if (target.state) {
-        const runInteraction = interactions[target.state];
+      // Interactions run in listed order. A target's `states` array drives
+      // which states axe sees — a modal that is never opened never has its
+      // markup scanned, so an unlabelled field inside it would sail through.
+      for (const state of target.states ?? []) {
+        const runInteraction = interactions[state];
         if (!runInteraction) {
-          throw new Error(`No interaction registered for state "${target.state}" (target: ${target.name}).`);
+          throw new Error(`No interaction registered for state "${state}" (target: ${target.name}).`);
         }
         await runInteraction(page);
       }
