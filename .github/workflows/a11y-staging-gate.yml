@@ -201,6 +201,17 @@ jobs:
           fail-on: serious
           show-personas: true
 
+      # Render a standalone HTML report (like demo-bakery's pr-gate-scan.yml)
+      # so the findings are readable without opening the run or the job summary.
+      - name: Render HTML report
+        if: always()
+        id: html
+        uses: pattonwebz/axe-html-report-action@v0.0.2
+        with:
+          results-file: artifacts/axe-results.json
+          output-file: artifacts/axe-report-staging.html
+          title: WP Notice Signup staging accessibility gate report
+
       # axe-report-action writes its report to the job summary (run page).
       # Surface the same content on the check run itself, so the PR checks tab
       # shows the findings without opening the run.
@@ -243,6 +254,7 @@ jobs:
           name: a11y-results-staging
           path: |
             artifacts/axe-results.json
+            artifacts/axe-report-staging.html
             artifacts/a11y/raw
             artifacts/playwright-results.json
             artifacts/playwright-report
