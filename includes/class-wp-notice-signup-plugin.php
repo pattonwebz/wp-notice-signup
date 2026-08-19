@@ -221,7 +221,6 @@ class WP_Notice_Signup_Plugin {
 	 */
 	public function render_admin_page() {
 		$settings = $this->get_settings();
-		$flags    = $this->get_demo_issue_flags();
 		?>
 		<div class="wrap wpns-admin-page">
 			<h1><?php esc_html_e( 'WP Notice Signup', 'wp-notice-signup' ); ?></h1>
@@ -323,16 +322,6 @@ class WP_Notice_Signup_Plugin {
 						</button>
 					</div>
 
-					<h3><?php esc_html_e( 'Demo failure switches', 'wp-notice-signup' ); ?></h3>
-					<p class="wpns-microcopy"><?php esc_html_e( 'All off. Each one introduces a specific, deliberate accessibility failure for a demo; see docs/plugin-failure-modes.md.', 'wp-notice-signup' ); ?></p>
-					<ul class="wpns-issue-list">
-						<?php foreach ( $flags as $flag => $enabled ) : ?>
-							<li>
-								<strong><?php echo esc_html( $flag ); ?></strong>
-								<span><?php echo $enabled ? esc_html__( 'on', 'wp-notice-signup' ) : esc_html__( 'off', 'wp-notice-signup' ); ?></span>
-							</li>
-						<?php endforeach; ?>
-					</ul>
 				</section>
 			</div>
 		</div>
