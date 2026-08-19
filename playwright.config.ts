@@ -33,8 +33,11 @@ export default defineConfig({
     browserName: "chromium",
     channel: process.env.PLAYWRIGHT_USE_SYSTEM_CHROME ? "chrome" : undefined,
     headless: true,
-    trace: "on-first-retry",
+    // Video and trace need Playwright's bundled ffmpeg, which we don't install
+    // when using the system Chrome — turn them off in that mode. Screenshots
+    // still capture failures, and the axe report is the real artifact.
+    trace: process.env.PLAYWRIGHT_USE_SYSTEM_CHROME ? "off" : "on-first-retry",
     screenshot: "only-on-failure",
-    video: "retain-on-failure"
+    video: process.env.PLAYWRIGHT_USE_SYSTEM_CHROME ? "off" : "retain-on-failure"
   }
 });
