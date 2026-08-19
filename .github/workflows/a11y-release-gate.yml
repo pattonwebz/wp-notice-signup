@@ -228,7 +228,7 @@ jobs:
       - name: Report and enforce threshold
         if: always()
         continue-on-error: true
-        uses: pattonwebz/axe-report-action@v0.0.3
+        uses: pattonwebz/axe-report-action@v0.0.5
         with:
           results-file: artifacts/axe-results.json
           fail-on: serious
