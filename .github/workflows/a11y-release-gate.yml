@@ -145,28 +145,20 @@ jobs:
           DEPLOY_REMOTE_PATH: ${{ secrets.DEPLOY_REMOTE_PATH }}
           DEPLOY_BASE_URL: ${{ secrets.DEPLOY_BASE_URL }}
 
-      - name: Configure the deploy key
+      - name: Configure the deploy key + known_hosts
+        env:
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
         run: |
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
           printf '%s\n' "${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-
-      # Separate step: the KNOWN_HOSTS value is multi-line, so it must not go
-      # through a shell `if [ -n ... ]` check.
-      - name: Write known_hosts from secret
-        if: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS != '' }}
-        run: |
-          mkdir -p ~/.ssh
-          printf '%s\n' "${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
-          chmod 600 ~/.ssh/known_hosts
-
-      - name: Trust staging host key (TOFU)
-        if: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS == '' }}
-        run: |
-          mkdir -p ~/.ssh
-          echo "::warning::DEPLOY_SSH_KNOWN_HOSTS not set — trusting the host key on first connect. Set it (output of 'ssh-keyscan -H your-host') to pin it."
-          ssh-keyscan -H "${{ secrets.DEPLOY_SSH_HOST }}" >> ~/.ssh/known_hosts
+          if [ -n "${KNOWN_HOSTS}" ] && printf '%s' "${KNOWN_HOSTS}" | grep -q .; then
+            printf '%s\n' "${KNOWN_HOSTS}" > ~/.ssh/known_hosts
+          else
+            echo "::warning::DEPLOY_SSH_KNOWN_HOSTS not set — trusting the host key on first connect. Set it (output of 'ssh-keyscan -H your-host') to pin it."
+            ssh-keyscan -H "${{ secrets.DEPLOY_SSH_HOST }}" >> ~/.ssh/known_hosts
+          fi
           chmod 600 ~/.ssh/known_hosts
 
       - name: Install lftp when deploying over SFTP
