@@ -72,16 +72,16 @@ jobs:
 
       - name: Configure production SSH key + known_hosts
         env:
-          KNOWN_HOSTS: ${{ secrets.PROD_SSH_KNOWN_HOSTS }}
+          KNOWN_HOSTS_B64: ${{ secrets.PROD_SSH_KNOWN_HOSTS }}
         run: |
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
           printf '%s\n' "${{ secrets.PROD_SSH_PRIVATE_KEY }}" > ~/.ssh/prod_key
           chmod 600 ~/.ssh/prod_key
-          if [ -n "${KNOWN_HOSTS}" ] && printf '%s' "${KNOWN_HOSTS}" | grep -q .; then
-            printf '%s\n' "${KNOWN_HOSTS}" > ~/.ssh/known_hosts
+          if [ -n "${KNOWN_HOSTS_B64}" ]; then
+            printf '%s' "${KNOWN_HOSTS_B64}" | base64 -d > ~/.ssh/known_hosts
           else
-            echo "::warning::PROD_SSH_KNOWN_HOSTS not set — trusting this server's host key on first connect (TOFU) via ssh-keyscan. Set that secret (output of 'ssh-keyscan -H your-host') to pin it instead."
+            echo "::warning::PROD_SSH_KNOWN_HOSTS not set — trusting this server's host key on first connect (TOFU) via ssh-keyscan. Set that secret (output of 'ssh-keyscan -H your-host' | base64 -w0) to pin it instead."
             ssh-keyscan -H "${{ secrets.PROD_SSH_HOST }}" >> ~/.ssh/known_hosts
           fi
           chmod 600 ~/.ssh/known_hosts
