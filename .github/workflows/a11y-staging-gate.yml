@@ -34,7 +34,7 @@ name: Staging accessibility gate
 
 on:
   pull_request:
-    branches: [main]
+    branches: [master]
   workflow_dispatch:
 
 permissions:
