@@ -97,12 +97,24 @@ jobs:
           chmod 700 ~/.ssh
           printf '%s\n' "${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          if [ -n "${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}" ]; then
-            printf '%s\n' "${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
-          else
-            echo "::warning::DEPLOY_SSH_KNOWN_HOSTS not set — trusting this server's host key on first connect (TOFU) via ssh-keyscan. Set that secret (output of 'ssh-keyscan -H your-host') to pin it instead and detect MITM/host-key changes."
-            ssh-keyscan -H "${{ secrets.DEPLOY_SSH_HOST }}" >> ~/.ssh/known_hosts
-          fi
+          chmod 600 ~/.ssh/known_hosts || true
+
+      # A separate step for known_hosts, gated on the secret being set. The
+      # value is multi-line, so it must not go through a shell `if [ -n ... ]`
+      # check — newlines in the secret would split the shell command.
+      - name: Write known_hosts from secret
+        if: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS != '' }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Trust staging host key (TOFU)
+        if: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS == '' }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "::warning::DEPLOY_SSH_KNOWN_HOSTS not set — trusting this server's host key on first connect (TOFU) via ssh-keyscan. Set that secret (output of 'ssh-keyscan -H your-host') to pin it instead and detect MITM/host-key changes."
+          ssh-keyscan -H "${{ secrets.DEPLOY_SSH_HOST }}" >> ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
 
       - name: Install lftp when deploying over SFTP

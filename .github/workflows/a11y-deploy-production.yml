@@ -76,12 +76,22 @@ jobs:
           chmod 700 ~/.ssh
           printf '%s\n' "${{ secrets.PROD_SSH_PRIVATE_KEY }}" > ~/.ssh/prod_key
           chmod 600 ~/.ssh/prod_key
-          if [ -n "${{ secrets.PROD_SSH_KNOWN_HOSTS }}" ]; then
-            printf '%s\n' "${{ secrets.PROD_SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
-          else
-            echo "::warning::PROD_SSH_KNOWN_HOSTS not set — trusting this server's host key on first connect (TOFU) via ssh-keyscan. Set that secret (output of 'ssh-keyscan -H your-host') to pin it instead."
-            ssh-keyscan -H "${{ secrets.PROD_SSH_HOST }}" >> ~/.ssh/known_hosts
-          fi
+
+      # Separate step: the KNOWN_HOSTS value is multi-line, so it must not go
+      # through a shell `if [ -n ... ]` check.
+      - name: Write known_hosts from secret
+        if: ${{ secrets.PROD_SSH_KNOWN_HOSTS != '' }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.PROD_SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Trust production host key (TOFU)
+        if: ${{ secrets.PROD_SSH_KNOWN_HOSTS == '' }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "::warning::PROD_SSH_KNOWN_HOSTS not set — trusting this server's host key on first connect (TOFU) via ssh-keyscan. Set that secret (output of 'ssh-keyscan -H your-host') to pin it instead."
+          ssh-keyscan -H "${{ secrets.PROD_SSH_HOST }}" >> ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
 
       - name: Install lftp when deploying over SFTP
